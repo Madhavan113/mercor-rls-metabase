@@ -1,7 +1,7 @@
 [arco]
 source = "foundry_app"
-name = "Metabase"
-version = "0.52.6"
+name = "Metabase Browser Use"
+version = "1.0.0"
 env_base = "standard"
 
 [arco.env.runtime]
