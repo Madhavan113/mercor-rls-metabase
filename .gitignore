@@ -29,3 +29,7 @@ metabase.jar
 # Modal sandbox build artifacts
 .build-cache/
 .biome/
+.env
+plugins/
+*.pid
+debug.log

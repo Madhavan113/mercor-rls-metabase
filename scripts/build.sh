@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
 set -e
 
+# macOS Java detection (Homebrew)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [ -z "$JAVA_HOME" ] && [ -d "/opt/homebrew/opt/openjdk@21" ]; then
+        export JAVA_HOME="/opt/homebrew/opt/openjdk@21"
+        export PATH="$JAVA_HOME/bin:$PATH"
+    elif [ -z "$JAVA_HOME" ] && [ -d "/usr/local/opt/openjdk@21" ]; then
+        export JAVA_HOME="/usr/local/opt/openjdk@21"
+        export PATH="$JAVA_HOME/bin:$PATH"
+    fi
+fi
+
 echo "=== Building Metabase ==="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SERVICE_DIR="$(dirname "$SCRIPT_DIR")"
 STATE_DIR="$SERVICE_DIR/.state"
 PLAYWRIGHT_STATE_PATH="$STATE_DIR/playwright/storageState.json"
-METABASE_JAR="/opt/metabase/metabase.jar"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    METABASE_JAR="$SERVICE_DIR/.local/metabase/metabase.jar"
+else
+    METABASE_JAR="/opt/metabase/metabase.jar"
+fi
 MB_PID=""
 
 if [ ! -f "$METABASE_JAR" ]; then

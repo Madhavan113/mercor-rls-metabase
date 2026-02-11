@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 set -e
 
+# macOS Java detection (Homebrew)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [ -z "$JAVA_HOME" ] && [ -d "/opt/homebrew/opt/openjdk@21" ]; then
+        export JAVA_HOME="/opt/homebrew/opt/openjdk@21"
+        export PATH="$JAVA_HOME/bin:$PATH"
+    elif [ -z "$JAVA_HOME" ] && [ -d "/usr/local/opt/openjdk@21" ]; then
+        export JAVA_HOME="/usr/local/opt/openjdk@21"
+        export PATH="$JAVA_HOME/bin:$PATH"
+    fi
+fi
+
 echo "=== Starting Metabase ==="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SERVICE_DIR="$(dirname "$SCRIPT_DIR")"
 STATE_DIR="$SERVICE_DIR/.state"
-METABASE_JAR="/opt/metabase/metabase.jar"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    METABASE_JAR="$SERVICE_DIR/.local/metabase/metabase.jar"
+else
+    METABASE_JAR="/opt/metabase/metabase.jar"
+fi
 
 WEBAPP_PORT="${WEBAPP_PORT:-8081}"
 BACKEND_PORT="${BACKEND_PORT:-3000}"
@@ -88,8 +103,26 @@ STUDIO_FRAME_ANCESTORS="${STUDIO_FRAME_ANCESTORS:-'self' https://studio.mercor.c
 
 export WEBAPP_PORT BACKEND_PORT COOKIE_SAMESITE COOKIE_SECURE_FLAG STUDIO_FRAME_ANCESTORS
 
+# Detect mime.types path
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [ -f "/opt/homebrew/etc/nginx/mime.types" ]; then
+        export NGINX_MIME_TYPES_PATH="/opt/homebrew/etc/nginx/mime.types"
+    elif [ -f "/usr/local/etc/nginx/mime.types" ]; then
+        export NGINX_MIME_TYPES_PATH="/usr/local/etc/nginx/mime.types"
+    else
+        export NGINX_MIME_TYPES_PATH="/etc/nginx/mime.types"
+    fi
+else
+    export NGINX_MIME_TYPES_PATH="/etc/nginx/mime.types"
+fi
+
 echo "Starting nginx on port ${WEBAPP_PORT}..."
-envsubst '${WEBAPP_PORT} ${BACKEND_PORT} ${COOKIE_SAMESITE} ${COOKIE_SECURE_FLAG} ${STUDIO_FRAME_ANCESTORS}' \
+# Ensure NGINX_MIME_TYPES_PATH is exported if not already
+if [ -z "$NGINX_MIME_TYPES_PATH" ]; then
+    export NGINX_MIME_TYPES_PATH="/etc/nginx/mime.types"
+fi
+
+envsubst '${WEBAPP_PORT} ${BACKEND_PORT} ${COOKIE_SAMESITE} ${COOKIE_SECURE_FLAG} ${STUDIO_FRAME_ANCESTORS} ${NGINX_MIME_TYPES_PATH}' \
     < "$SERVICE_DIR/config/nginx.conf" > /tmp/nginx.conf
 
 mkdir -p /tmp/client_temp /tmp/proxy_temp_path /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
