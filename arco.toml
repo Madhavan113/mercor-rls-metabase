@@ -1,0 +1,15 @@
+[arco]
+source = "foundry_app"
+name = "Metabase"
+version = "0.52.6"
+env_base = "standard"
+
+[arco.env.runtime]
+STATE_LOCATION = "/.apps_data/metabase"
+WEBAPP_PORT = "8081"
+BACKEND_PORT = "3000"
+
+# Iframe / cookie config (required for Studio embedding)
+COOKIE_SECURE = "true"
+COOKIE_SAMESITE = "none"
+STUDIO_FRAME_ANCESTORS = "'self' https://studio.mercor.com https://dev.studio.mercor.com https://demo.studio.mercor.com"

@@ -1,0 +1,32 @@
+name: Sync Foundry Service
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if RLS automation commit
+        id: check-rls
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "from RL Studio"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync Foundry Service to RL Studio
+        if: steps.check-rls.outputs.skip != 'true'
+        run: |
+          MISE_TOML=$(cat mise.toml | jq -Rs .)
+          ARCO_TOML=$(cat arco.toml | jq -Rs .)
+
+          curl -s -X POST "https://api.studio.mercor.com/services/sync" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${{ secrets.MERCOR_INTELLIGENCE_API_KEY }}" \
+            -d "{\"mise_toml\": ${MISE_TOML}, \"arco_toml\": ${ARCO_TOML}, \"commit\": \"${{ github.sha }}\"}"

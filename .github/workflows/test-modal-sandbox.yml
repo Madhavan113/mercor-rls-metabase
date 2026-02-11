@@ -1,0 +1,162 @@
+name: Test on Modal Sandbox
+on:
+  workflow_dispatch:
+    inputs:
+      service_ref:
+        description: "Branch, tag, or SHA to test (defaults to the branch you trigger from)"
+        required: false
+        type: string
+        default: ""
+      biome_ref:
+        description: "Biome repo ref for platform builder (default: main)"
+        required: false
+        type: string
+        default: "main"
+      sandbox_timeout:
+        description: "Sandbox timeout in seconds (default: 3600 = 1hr)"
+        required: false
+        type: string
+        default: "3600"
+      no_cache:
+        description: "Force rebuild without Modal image cache"
+        required: false
+        type: boolean
+        default: false
+      modal_app_name:
+        description: "Modal app name"
+        required: false
+        type: string
+        default: "bua-test"
+      modal_environment:
+        description: "Modal environment"
+        required: false
+        type: string
+        default: "rl-studio-apps"
+concurrency:
+  group: test-modal-sandbox-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test_service:
+    name: Build & Run on Modal
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      INPUT_SERVICE_REF: ${{ inputs.service_ref }}
+      INPUT_BIOME_REF: ${{ inputs.biome_ref }}
+      INPUT_SANDBOX_TIMEOUT: ${{ inputs.sandbox_timeout }}
+      INPUT_NO_CACHE: ${{ inputs.no_cache }}
+      INPUT_MODAL_APP_NAME: ${{ inputs.modal_app_name }}
+      INPUT_MODAL_ENVIRONMENT: ${{ inputs.modal_environment }}
+      GH_REF_NAME: ${{ github.ref_name }}
+    steps:
+      - name: Determine service ref
+        id: ref
+        run: |
+          REF="$INPUT_SERVICE_REF"
+          if [ -z "$REF" ]; then
+            REF="$GH_REF_NAME"
+          fi
+          echo "service_ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout service repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.service_ref }}
+
+      - name: Clone biome repo (platform builder)
+        env:
+          BIOME_REPO_TOKEN: ${{ secrets.BIOME_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone \
+            --depth 1 \
+            --branch "$INPUT_BIOME_REF" \
+            "https://x-access-token:${BIOME_REPO_TOKEN}@github.com/Mercor-io/biome.git" \
+            .biome
+
+      - name: Extract Python version
+        id: python_version
+        run: |
+          version=$(grep 'requires-python' .biome/rl-studio/server/pyproject.toml | sed -n 's/.*>= *\([0-9]*\.[0-9]*\).*/\1/p')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.python_version.outputs.version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Cache uv environment
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: biome-server-${{ runner.os }}-${{ hashFiles('.biome/rl-studio/server/uv.lock') }}
+          restore-keys: biome-server-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        working-directory: .biome/rl-studio/server
+        run: uv sync --frozen
+
+      - name: Run test-modal-sandbox.sh
+        run: |
+          set -euo pipefail
+
+          echo "::group::Service info"
+          echo "Ref: ${{ steps.ref.outputs.service_ref }}"
+          cat arco.toml
+          echo "::endgroup::"
+
+          NO_CACHE_FLAG=""
+          if [ "$INPUT_NO_CACHE" = "true" ]; then
+            NO_CACHE_FLAG="--no-cache"
+          fi
+
+          bash scripts/test-modal-sandbox.sh \
+            --biome-dir .biome \
+            --app-name "$INPUT_MODAL_APP_NAME" \
+            --timeout "$INPUT_SANDBOX_TIMEOUT" \
+            --env "$INPUT_MODAL_ENVIRONMENT" \
+            $NO_CACHE_FLAG \
+            2>&1 | tee modal-test-output.log
+
+      - name: Extract sandbox info
+        if: always()
+        run: |
+          if [ ! -f modal-test-output.log ]; then
+            echo "No output log found" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          SANDBOX_ID=$(grep -oP 'Sandbox ID:\s+\K\S+' modal-test-output.log || echo "unknown")
+          RUNNER_URL=$(grep -oP 'Runner URL:\s+\K\S+' modal-test-output.log || echo "unknown")
+          WEBAPP_URL=$(grep -oP -m1 'Port \d+:\s+\K\S+' modal-test-output.log || echo "unknown")
+
+          SERVICE_REF="${{ steps.ref.outputs.service_ref }}"
+
+          echo "### Modal Sandbox Info" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service Ref | \`$SERVICE_REF\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Biome Ref | \`$INPUT_BIOME_REF\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Sandbox ID | \`$SANDBOX_ID\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner URL | $RUNNER_URL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Webapp URL | $WEBAPP_URL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Timeout | ${INPUT_SANDBOX_TIMEOUT}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Sandbox will auto-terminate after timeout. To terminate manually:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "modal sandbox terminate $SANDBOX_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modal-test-output
+          path: modal-test-output.log
+          retention-days: 7

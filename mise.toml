@@ -1,0 +1,46 @@
+[env]
+STATE_LOCATION = "/.apps_data/metabase"
+
+[tasks.install]
+description = "Install Metabase and system dependencies"
+run = "bash scripts/install.sh"
+
+[tasks.build]
+description = "Initialize Metabase database and run setup"
+run = "bash scripts/build.sh"
+
+[tasks.start]
+description = "Start Metabase and nginx"
+run = "bash scripts/start.sh"
+
+[tasks.stop]
+description = "Stop all services"
+run = "bash scripts/stop.sh"
+
+[tasks.populate]
+description = "Load task data into application from STATE_LOCATION"
+run = "bash scripts/populate.sh"
+
+[tasks.snapshot]
+description = "Export application data to STATE_LOCATION"
+run = "bash scripts/snapshot.sh"
+
+[tasks.seed]
+description = "Create sample questions, dashboards, and seed data via API"
+run = "bash scripts/seed-data.sh"
+
+[tasks.lint]
+description = "Lint check (placeholder)"
+run = "echo 'No lint configured'"
+
+[tasks.format]
+description = "Format check (placeholder)"
+run = "echo 'No format configured'"
+
+[tasks.typecheck]
+description = "Type check (placeholder)"
+run = "echo 'No typecheck configured'"
+
+[tasks.test]
+description = "Run tests (placeholder)"
+run = "echo 'No tests configured'"

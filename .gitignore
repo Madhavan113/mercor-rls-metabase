@@ -1,0 +1,31 @@
+# Runtime state (never commit)
+.state/
+/.apps_data/
+
+# Python
+__pycache__/
+*.pyc
+
+# Java
+*.class
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Downloaded JAR (too large for git)
+/opt/metabase/
+metabase.jar
+
+# Modal sandbox build artifacts
+.build-cache/
+.biome/
